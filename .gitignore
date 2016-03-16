@@ -1,0 +1,14 @@
+
+# Binary
+SlackRollCall
+*.so
+*.exe
+
+# Ignore cache and test data
+userList.cache
+userList2.cache
+userList.json
+userList2.json
+userList.cache.bak
+
+
