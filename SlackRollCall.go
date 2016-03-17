@@ -19,6 +19,8 @@ User List: https://api.slack.com/methods/users.list:
 var isVerbose = false
 var saveCache = false
 
+var apiKey = ""
+
 // UserProfile contains all the information details of a given user
 type UserProfile struct {
 	FirstName          string `json:"first_name"`
@@ -104,11 +106,12 @@ func main() {
 		},
 	}
 	app.Action = func(c *cli.Context) {
-
 		if c.String("apikey") == "" {
 			fmt.Printf("Error: Slack API key must be set\n")
 			return
 		}
+
+		apiKey = c.String("apikey")
 
 		isVerbose = false
 
@@ -203,7 +206,7 @@ func findMember(id string, members *MemberList) *User {
 }
 
 func loadMemberListAsJson() []byte {
-	url := "https://slack.com/api/users.list?token=" + os.Getenv("SLACK_API_KEY")
+	url := "https://slack.com/api/users.list?token=" + apiKey
 	//fmt.Printf("URL: %s\n", url)
 
 	response, err := http.Get(url)
