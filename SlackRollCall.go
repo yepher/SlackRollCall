@@ -14,6 +14,9 @@ import (
 /**
 User List: https://api.slack.com/methods/users.list:
 	Example: https://slack.com/api/users.list?token=[YOUR_SLACK_API_TOKEN]
+
+
+	Empty UserList: {"ok": true,"members": [],"cache_ts": 0}
 **/
 
 var isVerbose = false
@@ -79,7 +82,7 @@ type MemberList struct {
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.0.1"
+	app.Version = "0.0.2"
 	app.Name = "Slack Role Call"
 	app.Usage = "Slack Role Call"
 	app.Flags = []cli.Flag{
@@ -97,12 +100,12 @@ func main() {
 		cli.StringFlag{
 			Name:  "cache, c",
 			Value: "./userList.cache",
-			Usage: "Set cache file to use.",
+			Usage: "Optional, set cache file to use.",
 		},
 		cli.StringFlag{
 			Name:  "updatecache, u",
 			Value: "false",
-			Usage: "Saves all current members to cache",
+			Usage: "Optional, saves all current members to cache",
 		},
 	}
 	app.Action = func(c *cli.Context) {
