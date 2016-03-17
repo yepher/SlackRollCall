@@ -2,8 +2,7 @@
 
 # Binary
 package
-App
-App.zip
+*.zip
 SlackRollCall
 *.so
 *.exe
