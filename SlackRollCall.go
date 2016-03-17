@@ -106,7 +106,7 @@ func main() {
 	app.Action = func(c *cli.Context) {
 
 		if c.String("apikey") == "" {
-			fmt.Printf("Error: SparkPost API key must be set\n")
+			fmt.Printf("Error: Slack API key must be set\n")
 			return
 		}
 
