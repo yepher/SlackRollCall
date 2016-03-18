@@ -58,7 +58,6 @@ SlackRollCall uses this the [User.List](https://api.slack.com/methods/users.list
 ## Next Steps
 
 * Enable SlackRollCall to send a daily email with a membership change list using
-* Post change list to a private Slack channel
 
 
 
