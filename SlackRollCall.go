@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/codegangsta/cli"
@@ -23,6 +24,7 @@ var isVerbose = false
 var saveCache = false
 
 var apiKey = ""
+var channel = ""
 
 // UserProfile contains all the information details of a given user
 type UserProfile struct {
@@ -82,9 +84,10 @@ type MemberList struct {
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.0.2"
-	app.Name = "Slack Role Call"
-	app.Usage = "Slack Role Call"
+	app.Version = "0.0.3"
+	//app.Name = "Slack Role Call"
+	app.Usage = "Track a Slack team's membership changes"
+	//app.UsageText = "TODO describe application usage"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "apikey, k",
@@ -107,10 +110,17 @@ func main() {
 			Value: "false",
 			Usage: "Optional, saves all current members to cache",
 		},
+		cli.StringFlag{
+			Name:  "channel, l",
+			Value: "",
+			Usage: "Optional, Slack channel to deliver results to. If not set a message will not be sent to Slack.",
+		},
 	}
 	app.Action = func(c *cli.Context) {
 		if c.String("apikey") == "" {
-			fmt.Printf("Error: Slack API key must be set\n")
+			fmt.Printf("\n\nError: Slack API key must be set\n\n")
+
+			cli.ShowAppHelp(c)
 			return
 		}
 
@@ -126,49 +136,55 @@ func main() {
 			saveCache = true
 		}
 
+		channel = c.String("channel")
+
 		dumpDelta(c.String("cache"))
 	}
 	app.Run(os.Args)
 }
 
 func dumpDelta(fileName string) {
+	var hasChanges = false
+	var result = ""
+
 	var memberList = loadMembersFromFile(fileName)
 	if memberList == nil {
-		fmt.Printf("No member list cached. Will create one\n")
+		result = fmt.Sprintf("%sNo member list cached. Will create one\n", result)
 		memberList := loadMemberListAsJson()
 		writeCache(fileName, memberList)
 
 		return
 	}
-	//fmt.Printf("Members List: %s\n\n", memberList)
 
-	//var memberList2 = loadMembers("./userList2.json")
 	var memberList2 = loadMemberList()
 
-	fmt.Println("Searching for MIA")
+	result = fmt.Sprintf("%sSearching for MIA\n", result)
+
 	// Search for new members
 	for _, element := range memberList.Members {
 		member := findMember(element.ID, memberList2)
 		if member == nil {
-			fmt.Printf("\t--- Missing Member, %s, %s\n", element.RealName, element.Profile.Email)
+			hasChanges = true
+			result = fmt.Sprintf("%s\t--- Missing Member, %s, %s\n", result, element.RealName, element.Profile.Email)
 		} else if member.Deleted != element.Deleted {
 			isDelete := "no"
 
 			if member.Deleted {
 				isDelete = "YES"
 			}
-
-			fmt.Printf("\t--- Member, %s, %s, isDelete: %s\n", element.RealName, element.Profile.Email, isDelete)
-
+			hasChanges = true
+			result = fmt.Sprintf("%s\t--- Member, %s, %s, isDelete: %s\n", result, element.RealName, element.Profile.Email, isDelete)
 		}
 	}
 
-	fmt.Println("Searching for new members")
+	result = fmt.Sprintf("%sSearching for new members\n", result)
+
 	// Search for missing members
 	for _, element := range memberList2.Members {
 		member := findMember(element.ID, memberList)
 		if member == nil {
-			fmt.Printf("\t+++ New Member, %s, %s - %s\n", element.RealName, element.Profile.Email, element.Profile.Title)
+			hasChanges = true
+			result = fmt.Sprintf("%s\t+++ New Member, %s, %s - %s\n", result, element.RealName, element.Profile.Email, element.Profile.Title)
 		}
 	}
 
@@ -178,18 +194,20 @@ func dumpDelta(fileName string) {
 		writeCache(fileName, newMemberList)
 	}
 
-	//fmt.Printf("Results: %s\n", members)
+	fmt.Println(result)
+
+	if channel != "" && hasChanges {
+		postMessage(channel, result)
+	}
 }
 
 func loadMembersFromFile(fileName string) *MemberList {
-	//fmt.Printf("Loading: %s", fileName)
 
 	file, e := ioutil.ReadFile(fileName)
 	if e != nil {
 		fmt.Printf("File error: %v\n", e)
 		return nil
 	}
-	//fmt.Printf("Will parse: %s", file)
 
 	var members *MemberList
 	json.Unmarshal(file, &members)
@@ -198,7 +216,6 @@ func loadMembersFromFile(fileName string) *MemberList {
 }
 
 func findMember(id string, members *MemberList) *User {
-	//fmt.Printf("\tLooking up: %s\n", id)
 	for _, element := range members.Members {
 		if element.ID == id {
 			return element
@@ -210,7 +227,6 @@ func findMember(id string, members *MemberList) *User {
 
 func loadMemberListAsJson() []byte {
 	url := "https://slack.com/api/users.list?token=" + apiKey
-	//fmt.Printf("URL: %s\n", url)
 
 	response, err := http.Get(url)
 	if err != nil {
@@ -256,4 +272,28 @@ func writeCache(filename string, byteArray []byte) {
 		fmt.Println(n, err)
 	}
 	f.Close()
+}
+
+func postMessage(channel string, message string) []byte {
+	message = url.QueryEscape(message)
+	channel = url.QueryEscape(channel)
+
+	url := "https://slack.com/api/chat.postMessage?token=" + apiKey + "&channel=" + channel + "&text=" + message
+
+	response, err := http.Get(url)
+	if err != nil {
+		fmt.Printf("%s", err)
+		os.Exit(1)
+	} else {
+		defer response.Body.Close()
+		contents, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			fmt.Printf("%s", err)
+			os.Exit(1)
+		}
+
+		return contents
+	}
+
+	return nil
 }
