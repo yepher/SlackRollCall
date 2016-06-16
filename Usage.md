@@ -14,17 +14,16 @@ The first time SlackRollCall is run it will create a cache of current users. Eac
 
 
 
-
 ```
 ./SlackRollCall --help
 NAME:
-   Slack Role Call - Slack Role Call
+   SlackRollCall - Track a Slack team's membership changes
 
 USAGE:
    SlackRollCall [global options] command [command options] [arguments...]
    
 VERSION:
-   0.0.1
+   0.0.3
    
 COMMANDS:
    help, h	Shows a list of commands or help for one command
@@ -32,12 +31,19 @@ COMMANDS:
 GLOBAL OPTIONS:
    --apikey, -k 			Required Slack API key [$SLACK_API_KEY]
    --verbose "false"			Dumps additional information to console
-   , -c "./userList.cache"	Set cache file to use.
-   --updatecache, -u "false"		Saves all current members to cache
+   --cache, -c "./userList.cache"	Optional, set cache file to use.
+   --updatecache, -u "false"		Optional, saves all current members to cache
+   --channel, -l 			Optional, Slack channel to deliver results to. If not set a message will not be sent to Slack.
    --help, -h				show help
    --version, -v			print the version
 ```
 
+
+Example: 
+
+`SlackRollCall -k "YOUR_SLACK_API_KEY" -c /tmp/userList.cache -u true --channel slackchanges`
+
+Each time this is run it will show changes since the last time it was run.
 
 **Sample Output**
 
@@ -57,7 +63,6 @@ SlackRollCall uses this the [User.List](https://api.slack.com/methods/users.list
 ## Next Steps
 
 * Enable SlackRollCall to send a daily email with a membership change list using
-* Post change list to a private Slack channel
 
 
 
