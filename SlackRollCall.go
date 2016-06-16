@@ -42,6 +42,7 @@ type UserProfile struct {
 	Image192           string `json:"image_192"`
 	ImageOriginal      string `json:"image_original"`
 	Title              string `json:"title"`
+	BotId              string `json:"bot_id"`
 }
 
 // User contains all the information of a user
@@ -184,7 +185,21 @@ func dumpDelta(fileName string) {
 		member := findMember(element.ID, memberList)
 		if member == nil {
 			hasChanges = true
-			result = fmt.Sprintf("%s\t+++ New Member, %s, %s - %s\n", result, element.RealName, element.Profile.Email, element.Profile.Title)
+
+			// Build a relaible name
+			var name =  element.ID
+			if len(element.RealName) > 0 {
+				name = element.RealName
+			} else if (len(element.Name) > 0) {
+				name = element.Name
+			} 
+
+			var isBot = ""
+			if element.IsBot {
+				isBot = fmt.Sprintf(", isBot: YES, (%s)", element.Profile.BotId );
+			}
+
+			result = fmt.Sprintf("%s\t+++ New Member, %s, %s, %s - %s \n", result, name, element.Profile.Email, element.Profile.Title, isBot)
 		}
 	}
 
