@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/codegangsta/cli"
 )
@@ -25,6 +26,7 @@ var saveCache = false
 
 var apiKey = ""
 var channel = ""
+var monitored = []string{}
 
 // UserProfile contains all the information details of a given user
 type UserProfile struct {
@@ -85,7 +87,7 @@ type MemberList struct {
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.0.3"
+	app.Version = "0.0.4"
 	//app.Name = "Slack Role Call"
 	app.Usage = "Track a Slack team's membership changes"
 	//app.UsageText = "TODO describe application usage"
@@ -116,6 +118,11 @@ func main() {
 			Value: "",
 			Usage: "Optional, Slack channel to deliver results to. If not set a message will not be sent to Slack.",
 		},
+		cli.StringFlag{
+			Name:  "monitor, m",
+			Value: "",
+			Usage: "Optional, A list of domains to monitor when a new user appears.",
+		},
 	}
 	app.Action = func(c *cli.Context) {
 		if c.String("apikey") == "" {
@@ -135,6 +142,12 @@ func main() {
 
 		if c.String("updatecache") == "true" {
 			saveCache = true
+		}
+
+		monitorString := c.String("monitor")
+		if monitorString != "" {
+			fmt.Printf("\nWill monitor the following domains:\n\t%s\n\n", monitorString)
+			monitored = strings.Split(monitorString, ",")
 		}
 
 		channel = c.String("channel")
@@ -161,7 +174,7 @@ func dumpDelta(fileName string) {
 
 	result = fmt.Sprintf("%sSearching for MIA\n", result)
 
-	// Search for new members
+	// Search for missing members
 	for _, element := range memberList.Members {
 		member := findMember(element.ID, memberList2)
 		if member == nil {
@@ -180,27 +193,39 @@ func dumpDelta(fileName string) {
 
 	result = fmt.Sprintf("%sSearching for new members\n", result)
 
-	// Search for missing members
+	// Search for new members
+	hasMonitoredEntries := false
+	monitoredEntries := "Searching for monitored members @everyone WARNING possible bad actor(s) joined.\n*Please verify these users:*\n"
+
 	for _, element := range memberList2.Members {
 		member := findMember(element.ID, memberList)
 		if member == nil {
 			hasChanges = true
 
 			// Build a relaible name
-			var name =  element.ID
+			var name = element.ID
 			if len(element.RealName) > 0 {
 				name = element.RealName
-			} else if (len(element.Name) > 0) {
+			} else if len(element.Name) > 0 {
 				name = element.Name
-			} 
+			}
 
 			var isBot = ""
 			if element.IsBot {
-				isBot = fmt.Sprintf(", isBot: YES, (%s)", element.Profile.BotId );
+				isBot = fmt.Sprintf(", isBot: YES, (%s)", element.Profile.BotId)
 			}
 
 			result = fmt.Sprintf("%s\t+++ New Member, %s, %s, %s - %s \n", result, name, element.Profile.Email, element.Profile.Title, isBot)
+
+			if isMonitored(element.Profile.Email) {
+				hasMonitoredEntries = true
+				monitoredEntries = fmt.Sprintf("%s\t*** Suspect Member, %s, %s, %s - %s \n", monitoredEntries, name, element.Profile.Email, element.Profile.Title, isBot)
+			}
 		}
+	}
+
+	if hasMonitoredEntries {
+		result = fmt.Sprintf("%s\n%s", result, monitoredEntries)
 	}
 
 	if saveCache {
@@ -238,6 +263,22 @@ func findMember(id string, members *MemberList) *User {
 	}
 
 	return nil
+}
+
+func isMonitored(id string) bool {
+	fmt.Printf("Checking: %s", id)
+	for _, element := range monitored {
+		if caseInsensitiveContains(id, element) {
+			fmt.Printf("%s matched monitored domain %s\n", id, element)
+			return true
+		}
+	}
+	return false
+}
+
+func caseInsensitiveContains(s, substr string) bool {
+	s, substr = strings.ToUpper(s), strings.ToUpper(substr)
+	return strings.Contains(s, substr)
 }
 
 func loadMemberListAsJson() []byte {
