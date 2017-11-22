@@ -6,6 +6,8 @@ package
 SlackRollCall
 *.so
 *.exe
+test.sh
+ChannelMonitor/ChannelMonitor
 
 # Ignore cache and test data
 *.cache
