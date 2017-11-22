@@ -138,7 +138,7 @@ func dumpDelta(fileName string) {
 	var channelList = loadChannelsFromFile(fileName)
 	if channelList == nil {
 		result = fmt.Sprintf("%sNo channel list cached. Will create one\n", result)
-		channelList := loadChannelListAsJson()
+		channelList := loadChannelListAsJSON()
 		writeCache(fileName, channelList)
 
 		return
@@ -187,21 +187,12 @@ func dumpDelta(fileName string) {
 			}
 
 			result = fmt.Sprintf("%s\t+++ New Channel, %s - %s \n", result, name, element.Purpose.Value)
-
-			// if isMonitored(element.Profile.Email) {
-			// 	hasMonitoredEntries = true
-			// 	monitoredEntries = fmt.Sprintf("%s\t*** Suspect Member, %s, %s, %s - %s \n", monitoredEntries, name, element.Profile.Email, element.Profile.Title, isBot)
-			// }
 		}
 	}
 
-	// if hasMonitoredEntries {
-	// 	result = fmt.Sprintf("%s\n%s", result, monitoredEntries)
-	// }
-
 	if saveCache {
 		fmt.Println("Updating cache")
-		newChannelList := loadChannelListAsJson()
+		newChannelList := loadChannelListAsJSON()
 		writeCache(fileName, newChannelList)
 	}
 
@@ -236,23 +227,7 @@ func findChannel(id string, channels *ChannelList) *Channel {
 	return nil
 }
 
-// func isMonitored(id string) bool {
-// 	fmt.Printf("Checking: %s", id)
-// 	for _, element := range monitored {
-// 		if caseInsensitiveContains(id, element) {
-// 			fmt.Printf("%s matched monitored domain %s\n", id, element)
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
-
-// func caseInsensitiveContains(s, substr string) bool {
-// 	s, substr = strings.ToUpper(s), strings.ToUpper(substr)
-// 	return strings.Contains(s, substr)
-// }
-
-func loadChannelListAsJson() []byte {
+func loadChannelListAsJSON() []byte {
 	url := "https://slack.com/api/channels.list?token=" + apiKey
 
 	response, err := http.Get(url)
@@ -274,7 +249,7 @@ func loadChannelListAsJson() []byte {
 }
 
 func loadChannelList() *ChannelList {
-	contents := loadChannelListAsJson()
+	contents := loadChannelListAsJSON()
 
 	if contents != nil {
 		var channels *ChannelList
