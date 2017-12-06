@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/codegangsta/cli"
 )
@@ -152,16 +153,23 @@ func dumpDelta(fileName string) {
 	for _, element := range channelList.Channels {
 		channel := findChannel(element.ID, channelList2)
 		if channel == nil {
-			hasChanges = true
-			result = fmt.Sprintf("%s\t--- Missing Channel, %s\n", result, element.Name)
+			isTemp := strings.HasPrefix(element.Name, "z-")
+			if !isTemp {
+				hasChanges = true
+				result = fmt.Sprintf("%s\t--- Missing Channel, %s\n", result, element.Name)
+			}
 		} else if channel.IsArchived != element.IsArchived {
 			isDelete := "no"
-
+			//fmt.Printf("%s changed states from ", element.Name, channel.IsArchived, element.IsArchived)
 			if channel.IsArchived {
 				isDelete = "YES"
 			}
-			hasChanges = true
-			result = fmt.Sprintf("%s\t--- Channel, %s, %s, isDelete: %s\n", result, element.Name, element.Purpose.Value, isDelete)
+
+			isTemp := strings.HasPrefix(element.Name, "z-")
+			if !isTemp {
+				hasChanges = true
+				result = fmt.Sprintf("%s\t*** Channel Changed, %s, %s, isDelete: %s\n", result, element.Name, element.Purpose.Value, isDelete)
+			}
 		}
 	}
 
@@ -185,8 +193,11 @@ func dumpDelta(fileName string) {
 			} else if len(element.Name) > 0 {
 				name = element.Name
 			}
+			isTemp := strings.HasPrefix(name, "z-")
 
-			result = fmt.Sprintf("%s\t+++ New Channel, %s - %s \n", result, name, element.Purpose.Value)
+			if !isTemp {
+				result = fmt.Sprintf("%s\t+++ New Channel, %s - %s \n", result, name, element.Purpose.Value)
+			}
 		}
 	}
 
