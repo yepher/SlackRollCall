@@ -182,8 +182,6 @@ func dumpDelta(fileName string) {
 	for _, element := range channelList2.Channels {
 		channel := findChannel(element.ID, channelList)
 		if channel == nil {
-			hasChanges = true
-
 			// Build a relaible name
 			var name = element.ID
 
@@ -196,7 +194,8 @@ func dumpDelta(fileName string) {
 			isTemp := strings.HasPrefix(name, "z-")
 
 			if !isTemp {
-				result = fmt.Sprintf("%s\t+++ New Channel, %s - %s \n", result, name, element.Purpose.Value)
+				hasChanges = true
+				result = fmt.Sprintf("%s\t+++ New Channel, <#%s> - %s \n", result, element.ID, element.Purpose.Value)
 			}
 		}
 	}

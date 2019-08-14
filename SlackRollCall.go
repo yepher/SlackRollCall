@@ -161,33 +161,43 @@ func dumpDelta(fileName string) {
 	var hasChanges = false
 	var result = ""
 
-	var memberList = loadMembersFromFile(fileName)
-	if memberList == nil {
+	var previousList = loadMembersFromFile(fileName)
+	if previousList == nil {
 		result = fmt.Sprintf("%sNo member list cached. Will create one\n", result)
-		memberList := loadMemberListAsJson()
-		writeCache(fileName, memberList)
+		previousList := loadMemberListAsJson()
+		writeCache(fileName, previousList)
 
 		return
 	}
 
-	var memberList2 = loadMemberList()
+	var currentList = loadMemberList()
 
 	result = fmt.Sprintf("%sSearching for MIA\n", result)
 
-	// Search for missing members
-	for _, element := range memberList.Members {
-		member := findMember(element.ID, memberList2)
-		if member == nil {
+	// Search for members who were in previous list
+	// and no longer exit in the current list
+	// or the deleted flag has changed
+	for _, previousRecord := range previousList.Members {
+		currentRecord := findMember(previousRecord.ID, currentList)
+		if currentRecord == nil {
 			hasChanges = true
-			result = fmt.Sprintf("%s\t--- Missing Member, %s, %s\n", result, element.RealName, element.Profile.Email)
-		} else if member.Deleted != element.Deleted {
-			isDelete := "no"
+			result = fmt.Sprintf("%s\t--- Missing Member, %s, %s\n", result, previousRecord.RealName, previousRecord.Profile.Email)
+		} else if currentRecord.Deleted != previousRecord.Deleted {
+			isDelete := "No"
 
-			if member.Deleted {
-				isDelete = "YES"
+			if currentRecord.Deleted {
+				isDelete = "Yes"
 			}
 			hasChanges = true
-			result = fmt.Sprintf("%s\t--- Member, %s, %s, isDelete: %s\n", result, element.RealName, element.Profile.Email, isDelete)
+			result = fmt.Sprintf("%s\t--- Member, %s, %s, isDelete: %s\n", result, currentRecord.RealName, currentRecord.Profile.Email, isDelete)
+
+			if previousRecord != nil {
+				fmt.Printf("\n\nPrevious Record: %+v\n", previousRecord)
+			}
+
+			if currentRecord != nil {
+				fmt.Printf("Current Record: %+v\n\n", currentRecord)
+			}
 		}
 	}
 
@@ -197,12 +207,12 @@ func dumpDelta(fileName string) {
 	hasMonitoredEntries := false
 	monitoredEntries := "Searching for monitored members @everyone WARNING possible bad actor(s) joined.\n*Please verify these users:*\n"
 
-	for _, element := range memberList2.Members {
-		member := findMember(element.ID, memberList)
-		if member == nil {
+	for _, element := range currentList.Members {
+		previousRecord := findMember(element.ID, previousList)
+		if previousRecord == nil {
 			hasChanges = true
 
-			// Build a relaible name
+			// Build a reliable name
 			var name = element.ID
 			if len(element.RealName) > 0 {
 				name = element.RealName
@@ -266,7 +276,7 @@ func findMember(id string, members *MemberList) *User {
 }
 
 func isMonitored(id string) bool {
-	fmt.Printf("Checking: %s", id)
+	fmt.Printf("Checking: %s\n", id)
 	for _, element := range monitored {
 		if caseInsensitiveContains(id, element) {
 			fmt.Printf("%s matched monitored domain %s\n", id, element)
