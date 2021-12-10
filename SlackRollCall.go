@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
@@ -15,7 +15,7 @@ import (
 
 /**
 User List: https://api.slack.com/methods/users.list:
-	Example: https://slack.com/api/users.list?token=[YOUR_SLACK_API_TOKEN]
+	Example: https://slack.com/api/users.list
 
 
 	Empty UserList: {"ok": true,"members": [],"cache_ts": 0}
@@ -83,6 +83,11 @@ type MemberList struct {
 	Ok             bool    `json:"ok"`
 	Members        []*User `json:"members,omitempty"`
 	CacheTimestamp uint64  `json:"cache_ts"`
+}
+
+type SlackMessage struct {
+	Channel string `json:"channel"`
+	Text    string `json:"text"`
 }
 
 func main() {
@@ -171,6 +176,11 @@ func dumpDelta(fileName string) {
 	}
 
 	var currentList = loadMemberList()
+
+	if !currentList.Ok {
+		fmt.Printf("Current List Failed: \n%#v", currentList)
+		os.Exit(1)
+	}
 
 	result = fmt.Sprintf("%sSearching for MIA\n", result)
 
@@ -292,9 +302,13 @@ func caseInsensitiveContains(s, substr string) bool {
 }
 
 func loadMemberListAsJson() []byte {
-	url := "https://slack.com/api/users.list?token=" + apiKey
+	url := "https://slack.com/api/users.list?pretty=1"
 
-	response, err := http.Get(url)
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", "Bearer "+apiKey)
+	response, err := client.Do(req)
+
 	if err != nil {
 		fmt.Printf("%s", err)
 		os.Exit(1)
@@ -341,21 +355,33 @@ func writeCache(filename string, byteArray []byte) {
 }
 
 func postMessage(channel string, message string) []byte {
-	message = url.QueryEscape(message)
-	channel = url.QueryEscape(channel)
+	slackMessage := &SlackMessage{
+		channel,
+		message,
+	}
+	json, err := json.Marshal(slackMessage)
+	fmt.Printf("POST: %s\n\n", json)
 
-	url := "https://slack.com/api/chat.postMessage?token=" + apiKey + "&channel=" + channel + "&text=" + message
+	url := "https://slack.com/api/chat.postMessage"
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(json))
+	req.Header.Add("Authorization", "Bearer "+apiKey)
+	req.Header.Add("Content-type", "application/json; charset=utf-8")
+	//req.Header.Add("Content-Type", "text/html; charset=utf-8")
+	response, err := client.Do(req)
 
-	response, err := http.Get(url)
 	if err != nil {
 		fmt.Printf("%s", err)
 		os.Exit(1)
 	} else {
 		defer response.Body.Close()
 		contents, err := ioutil.ReadAll(response.Body)
+
 		if err != nil {
 			fmt.Printf("%s", err)
 			os.Exit(1)
+		} else {
+			fmt.Println(string(contents))
 		}
 
 		return contents
