@@ -80,9 +80,14 @@ type UserPresence struct {
 }
 
 type MemberList struct {
-	Ok             bool    `json:"ok"`
-	Members        []*User `json:"members,omitempty"`
-	CacheTimestamp uint64  `json:"cache_ts"`
+	Ok             bool             `json:"ok"`
+	Members        []*User          `json:"members,omitempty"`
+	CacheTimestamp uint64           `json:"cache_ts"`
+	Metadata       ResponseMetadata `json:"response_metadata,omitempty"`
+}
+
+type ResponseMetadata struct {
+	NextCursor string `json:"next_cursor"`
 }
 
 type SlackMessage struct {
@@ -169,14 +174,14 @@ func dumpDelta(fileName string) {
 	var previousList = loadMembersFromFile(fileName)
 	if previousList == nil {
 		result = fmt.Sprintf("%sNo member list cached. Will create one\n", result)
-		previousList := loadMemberListAsJson()
-		writeCache(fileName, previousList)
+		previousList := loadMemberList()
+		json, _ := json.Marshal(previousList)
+		writeCache(fileName, json)
 
 		return
 	}
 
 	var currentList = loadMemberList()
-
 	if !currentList.Ok {
 		fmt.Printf("Current List Failed: \n%#v", currentList)
 		os.Exit(1)
@@ -250,8 +255,10 @@ func dumpDelta(fileName string) {
 
 	if saveCache {
 		fmt.Println("Updating cache")
-		newMemberList := loadMemberListAsJson()
-		writeCache(fileName, newMemberList)
+		//newMemberList := loadMemberList()
+		json, _ := json.Marshal(currentList)
+		//bytes.NewBuffer(json)
+		writeCache(fileName, json)
 	}
 
 	fmt.Println(result)
@@ -301,8 +308,13 @@ func caseInsensitiveContains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
-func loadMemberListAsJson() []byte {
+func loadMemberListAsJson(cursor string) []byte {
 	url := "https://slack.com/api/users.list?pretty=1"
+
+	if len(cursor) > 0 {
+		url = url + "&cursor=" + cursor
+	}
+	fmt.Printf("UserList URL: %s\n", url)
 
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
@@ -327,7 +339,36 @@ func loadMemberListAsJson() []byte {
 }
 
 func loadMemberList() *MemberList {
-	contents := loadMemberListAsJson()
+	pageNum := 1
+	var cursor = ""
+
+	var currentList = loadMemberListForCursor(cursor)
+	if !currentList.Ok {
+		fmt.Printf("Current List Failed: \n%#v", currentList)
+		os.Exit(1)
+	}
+
+	cursor = currentList.Metadata.NextCursor
+	fmt.Printf("\tNext Cursor: %s\n", cursor)
+
+	for len(cursor) > 0 {
+		pageNum = pageNum + 1
+		var nextPage = loadMemberListForCursor(cursor)
+		if nextPage == nil || !nextPage.Ok {
+			fmt.Printf("Failed to load member list from server: \n%#v\n", nextPage)
+			os.Exit(1)
+		}
+
+		currentList.Members = append(currentList.Members, nextPage.Members...)
+		cursor = nextPage.Metadata.NextCursor
+		fmt.Printf("\t%d, Next Cursor: %s\n", pageNum, cursor)
+	}
+
+	return currentList
+}
+
+func loadMemberListForCursor(cursor string) *MemberList {
+	contents := loadMemberListAsJson(cursor)
 
 	if contents != nil {
 		var members *MemberList
@@ -360,7 +401,7 @@ func postMessage(channel string, message string) []byte {
 		message,
 	}
 	json, err := json.Marshal(slackMessage)
-	fmt.Printf("POST: %s\n\n", json)
+	//fmt.Printf("POST: %s\n\n", json)
 
 	url := "https://slack.com/api/chat.postMessage"
 	client := &http.Client{}
@@ -380,9 +421,11 @@ func postMessage(channel string, message string) []byte {
 		if err != nil {
 			fmt.Printf("%s", err)
 			os.Exit(1)
-		} else {
-			fmt.Println(string(contents))
-		}
+		} /*
+			else {
+				fmt.Println(string(contents))
+			}
+		*/
 
 		return contents
 	}
