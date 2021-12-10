@@ -200,7 +200,7 @@ func dumpDelta(fileName string) {
 
 			if !isTemp {
 				hasChanges = true
-				result = fmt.Sprintf("%s\t+++ New Channel, #%s - `%s` \n", result, element.NameNormalized, element.Purpose.Value)
+				result = fmt.Sprintf("%s\t+++ New Channel, <#%s> - `%s` \n", result, element.ID, element.Purpose.Value)
 			}
 		}
 	}
