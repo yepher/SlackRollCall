@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
@@ -14,9 +14,8 @@ import (
 )
 
 /**
-Channel List: https://api.slack.com/methods/channels.list:
-	Example: https://slack.com/api/channels.list?token=[YOUR_SLACK_API_TOKEN]
-
+Conversation List: https://api.slack.com/methods/conversations.list:
+	Example: https://slack.com/api/conversations.list
 **/
 
 var isVerbose = false
@@ -63,6 +62,11 @@ type ChannelList struct {
 	ResponseMetadata struct {
 		NextCursor string `json:"next_cursor"`
 	} `json:"response_metadata"`
+}
+
+type SlackMessage struct {
+	Channel string `json:"channel"`
+	Text    string `json:"text"`
 }
 
 func main() {
@@ -139,8 +143,9 @@ func dumpDelta(fileName string) {
 	var channelList = loadChannelsFromFile(fileName)
 	if channelList == nil {
 		result = fmt.Sprintf("%sNo channel list cached. Will create one\n", result)
-		channelList := loadChannelListAsJSON()
-		writeCache(fileName, channelList)
+		channelList := loadChannelList()
+		json, _ := json.Marshal(channelList)
+		writeCache(fileName, json)
 
 		return
 	}
@@ -156,7 +161,7 @@ func dumpDelta(fileName string) {
 			isTemp := strings.HasPrefix(element.Name, "z-")
 			if !isTemp {
 				hasChanges = true
-				result = fmt.Sprintf("%s\t--- Missing Channel, %s\n", result, element.Name)
+				result = fmt.Sprintf("%s\t--- Missing Channel `%s`\n", result, element.Name)
 			}
 		} else if channel.IsArchived != element.IsArchived {
 			isDelete := "no"
@@ -195,15 +200,15 @@ func dumpDelta(fileName string) {
 
 			if !isTemp {
 				hasChanges = true
-				result = fmt.Sprintf("%s\t+++ New Channel, <#%s> - %s \n", result, element.ID, element.Purpose.Value)
+				result = fmt.Sprintf("%s\t+++ New Channel, #%s - `%s` \n", result, element.NameNormalized, element.Purpose.Value)
 			}
 		}
 	}
 
 	if saveCache {
 		fmt.Println("Updating cache")
-		newChannelList := loadChannelListAsJSON()
-		writeCache(fileName, newChannelList)
+		json, _ := json.Marshal(channelList2)
+		writeCache(fileName, json)
 	}
 
 	fmt.Println(result)
@@ -237,10 +242,19 @@ func findChannel(id string, channels *ChannelList) *Channel {
 	return nil
 }
 
-func loadChannelListAsJSON() []byte {
-	url := "https://slack.com/api/channels.list?token=" + apiKey
+func loadChannelListAsJSON(cursor string) []byte {
+	url := "https://slack.com/api/conversations.list?exclude_archived=true&types=public_channel"
 
-	response, err := http.Get(url)
+	if len(cursor) > 0 {
+		url = url + "&cursor=" + cursor
+	}
+	fmt.Printf("UserList URL: %s\n", url)
+
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", "Bearer "+apiKey)
+	response, err := client.Do(req)
+
 	if err != nil {
 		fmt.Printf("%s", err)
 		os.Exit(1)
@@ -259,15 +273,41 @@ func loadChannelListAsJSON() []byte {
 }
 
 func loadChannelList() *ChannelList {
-	contents := loadChannelListAsJSON()
+	var cursor = ""
+	pageNum := 1
+	contents := loadChannelListAsJSON(cursor)
 
-	if contents != nil {
-		var channels *ChannelList
-		json.Unmarshal(contents, &channels)
-		return channels
+	if contents == nil {
+		fmt.Printf("Current List Failed: nil conversation list returned")
+		os.Exit(1)
+	}
+	var channels *ChannelList
+	json.Unmarshal(contents, &channels)
+
+	if !channels.Ok {
+		fmt.Printf("Current List Failed: \n%#v", channels)
+		os.Exit(1)
 	}
 
-	return nil
+	cursor = channels.ResponseMetadata.NextCursor
+	fmt.Printf("\tNext Cursor: %s\n", cursor)
+	//cursor = ""
+	for len(cursor) > 0 {
+		pageNum = pageNum + 1
+		var data = loadChannelListAsJSON(cursor)
+		var nextPage *ChannelList
+		json.Unmarshal(data, &nextPage)
+		if nextPage == nil || !nextPage.Ok {
+			fmt.Printf("Failed to load conversation list from server: \n%#v\n", nextPage)
+			os.Exit(1)
+		}
+
+		channels.Channels = append(channels.Channels, nextPage.Channels...)
+		cursor = nextPage.ResponseMetadata.NextCursor
+		fmt.Printf("\t%d, Next Cursor: %s\n", pageNum, cursor)
+	}
+
+	return channels
 }
 
 func writeCache(filename string, byteArray []byte) {
@@ -287,22 +327,36 @@ func writeCache(filename string, byteArray []byte) {
 }
 
 func postMessage(channel string, message string) []byte {
-	message = url.QueryEscape(message)
-	channel = url.QueryEscape(channel)
+	slackMessage := &SlackMessage{
+		channel,
+		message,
+	}
+	json, err := json.Marshal(slackMessage)
+	//fmt.Printf("POST: %s\n\n", json)
 
-	url := "https://slack.com/api/chat.postMessage?token=" + apiKey + "&channel=" + channel + "&text=" + message
+	url := "https://slack.com/api/chat.postMessage"
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(json))
+	req.Header.Add("Authorization", "Bearer "+apiKey)
+	req.Header.Add("Content-type", "application/json; charset=utf-8")
+	//req.Header.Add("Content-Type", "text/html; charset=utf-8")
+	response, err := client.Do(req)
 
-	response, err := http.Get(url)
 	if err != nil {
 		fmt.Printf("%s", err)
 		os.Exit(1)
 	} else {
 		defer response.Body.Close()
 		contents, err := ioutil.ReadAll(response.Body)
+
 		if err != nil {
 			fmt.Printf("%s", err)
 			os.Exit(1)
-		}
+		} /*
+			else {
+				fmt.Println(string(contents))
+			}
+		*/
 
 		return contents
 	}
