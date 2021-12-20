@@ -24,6 +24,8 @@ var saveCache = false
 var apiKey = ""
 var channel = ""
 
+var ignorePrefixes []string
+
 // Channel contains all the information of a channel
 type Channel struct {
 	ID             string   `json:"id"`
@@ -101,6 +103,10 @@ func main() {
 			Name:  "channel, l",
 			Value: "",
 			Usage: "Optional, Slack channel to deliver results to. If not set a message will not be sent to Slack.",
+		}, cli.StringFlag{
+			Name:  "ignore, i",
+			Value: "",
+			Usage: "Optional, Ignore channels with these prefixes.",
 		},
 	}
 	app.Action = func(c *cli.Context) {
@@ -121,6 +127,12 @@ func main() {
 
 		if c.String("updatecache") == "true" {
 			saveCache = true
+		}
+
+		if c.String("ignore") != "" {
+			ignorePrefixes = strings.Split(c.String("ignore"), ",")
+			fmt.Print("Will ignore: ")
+			fmt.Println(ignorePrefixes)
 		}
 
 		// monitorString := c.String("monitor")
@@ -152,16 +164,16 @@ func dumpDelta(fileName string) {
 
 	var channelList2 = loadChannelList()
 
-	result = fmt.Sprintf("%sSearching for missing channels\n", result)
+	result = fmt.Sprintf("%s\n", result)
 
 	// Search for missing members
 	for _, element := range channelList.Channels {
 		channel := findChannel(element.ID, channelList2)
 		if channel == nil {
-			isTemp := strings.HasPrefix(element.Name, "z-")
-			if !isTemp {
+			if !isIgnored(element) {
 				hasChanges = true
-				result = fmt.Sprintf("%s\t--- Missing Channel `%s`\n", result, element.Name)
+				description := getDescription(element)
+				result = fmt.Sprintf("%s\t--- Removed Channel `%s` - %s\n", result, element.Name, description)
 			}
 		} else if channel.IsArchived != element.IsArchived {
 			isDelete := "no"
@@ -170,10 +182,10 @@ func dumpDelta(fileName string) {
 				isDelete = "YES"
 			}
 
-			isTemp := strings.HasPrefix(element.Name, "z-")
-			if !isTemp {
+			if !isIgnored(element) {
 				hasChanges = true
-				result = fmt.Sprintf("%s\t*** Channel Changed, %s, %s, isDelete: %s\n", result, element.Name, element.Purpose.Value, isDelete)
+				description := getDescription(element)
+				result = fmt.Sprintf("%s\t*** Channel Changed, %s, %s, isDelete: %s\n", result, element.Name, description, isDelete)
 			}
 		}
 	}
@@ -187,20 +199,11 @@ func dumpDelta(fileName string) {
 	for _, element := range channelList2.Channels {
 		channel := findChannel(element.ID, channelList)
 		if channel == nil {
-			// Build a relaible name
-			var name = element.ID
 
-			// TODO: this is redundant *******
-			if len(element.Name) > 0 {
-				name = element.Name
-			} else if len(element.Name) > 0 {
-				name = element.Name
-			}
-			isTemp := strings.HasPrefix(name, "z-")
-
-			if !isTemp {
+			if !isIgnored(element) {
 				hasChanges = true
-				result = fmt.Sprintf("%s\t+++ New Channel, <#%s> - `%s` \n", result, element.ID, element.Purpose.Value)
+				description := getDescription(element)
+				result = fmt.Sprintf("%s\t+++ Added Channel, <#%s> - %s \n", result, element.ID, description)
 			}
 		}
 	}
@@ -216,6 +219,32 @@ func dumpDelta(fileName string) {
 	if channel != "" && hasChanges {
 		postMessage(channel, result)
 	}
+}
+
+func isIgnored(element *Channel) bool {
+	var name = element.Name
+	if len(name) == 0 {
+		return true
+	}
+
+	for _, word := range ignorePrefixes {
+		if strings.HasPrefix(name, word) {
+			fmt.Printf("Ignoring: %s\n", name)
+			return true
+		}
+	}
+
+	return false
+}
+
+func getDescription(element *Channel) string {
+	description := ""
+	if element.Purpose.Value != "" {
+		description = "`" + element.Purpose.Value + "`"
+	} else if element.Topic.Value != "" {
+		description = "`" + element.Topic.Value + "`"
+	}
+	return description
 }
 
 func loadChannelsFromFile(fileName string) *ChannelList {
