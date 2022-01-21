@@ -97,7 +97,7 @@ type SlackMessage struct {
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.0.4"
+	app.Version = "0.0.5"
 	//app.Name = "Slack Role Call"
 	app.Usage = "Track a Slack team's membership changes"
 	//app.UsageText = "TODO describe application usage"
@@ -196,15 +196,59 @@ func dumpDelta(fileName string) {
 		currentRecord := findMember(previousRecord.ID, currentList)
 		if currentRecord == nil {
 			hasChanges = true
-			result = fmt.Sprintf("%s\t--- Missing Member, %s, %s\n", result, previousRecord.RealName, previousRecord.Profile.Email)
+			title := ""
+			if len(previousRecord.Profile.Title) > 0 {
+				title = "\n\t\t      " + previousRecord.Profile.Title
+			}
+
+			isBot := ""
+			if previousRecord.IsBot {
+				isBot = " [BOT] "
+			}
+
+			realName := previousRecord.RealName
+			if len(realName) == 0 {
+				realName = previousRecord.Profile.RealName
+				//om, _ := json.Marshal(previousRecord)
+				//fmt.Printf("%s\n", string(om))
+			}
+
+			result = fmt.Sprintf("%s\t--- Missing Member, %s, %s, %s, %s\n",
+				result,
+				realName,
+				previousRecord.Profile.Email,
+				isBot,
+				title)
 		} else if currentRecord.Deleted != previousRecord.Deleted {
 			isDelete := "No"
 
 			if currentRecord.Deleted {
 				isDelete = "Yes"
 			}
+
+			title := ""
+			if len(currentRecord.Profile.Title) > 0 {
+				title = "\n\t\t      " + currentRecord.Profile.Title
+			}
+
+			isBot := ""
+			if currentRecord.IsBot {
+				isBot = " [BOT] "
+			}
+
+			realName := currentRecord.RealName
+			if len(realName) == 0 {
+				realName = currentRecord.Profile.RealName
+			}
+
 			hasChanges = true
-			result = fmt.Sprintf("%s\t--- Member, %s, %s, isDelete: %s\n", result, currentRecord.RealName, currentRecord.Profile.Email, isDelete)
+			result = fmt.Sprintf("%s\t--- Member, %s, %s, isDelete: %s %s %s\n",
+				result,
+				currentRecord.RealName,
+				currentRecord.Profile.Email,
+				isDelete,
+				isBot,
+				title)
 
 			if previousRecord != nil {
 				fmt.Printf("\n\nPrevious Record: %+v\n", previousRecord)
