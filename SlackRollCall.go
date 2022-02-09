@@ -238,14 +238,19 @@ func dumpDelta(fileName string) {
 
 			realName := currentRecord.RealName
 			if len(realName) == 0 {
-				realName = currentRecord.Profile.RealName
+				realName = previousRecord.RealName
+			}
+
+			emailAddr := currentRecord.Profile.Email
+			if len(emailAddr) == 0 {
+				emailAddr = previousRecord.Profile.Email
 			}
 
 			hasChanges = true
 			result = fmt.Sprintf("%s\t--- Member, %s, %s, isDelete: %s %s %s\n",
 				result,
-				currentRecord.RealName,
-				currentRecord.Profile.Email,
+				realName,
+				emailAddr,
 				isDelete,
 				isBot,
 				title)
